@@ -12,26 +12,53 @@ func main() {
 		log.Fatalf("Could not listen on port %v: %v\n", PORT, err)
 	}
 	log.Printf("Listening to TCP connections on port %v\n", PORT)
+	messages := make(chan Message)
+	conns := []net.Conn{}
+	go sendMessages(messages, &conns)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("Could not accept connection: %v\n", err)
+			continue
 		}
+		conns = append(conns, conn)
 		log.Printf("Accepted connection from %v\n", conn.RemoteAddr())
-		go handleConnection(conn)
+		messages <- Message{conn, ""}
+		go receiveMessages(conn, messages)
 	}
 }
 
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-	message := []byte("Hello world!\n")
-	n, err := conn.Write(message)
-	if err != nil {
-		log.Printf("Could not write message to %v: %v\n", conn.RemoteAddr(), err)
-		return
+type Message struct {
+	conn    net.Conn
+	content string
+}
+
+func sendMessages(messages chan Message, conns *[]net.Conn) {
+	for {
+		msg := <-messages
+		for _, conn := range *conns {
+			if conn == msg.conn {
+				continue
+			}
+			_, err := conn.Write([]byte(msg.content))
+			if err != nil {
+				log.Printf("Could not send message to %s: %s", conn.RemoteAddr(), err)
+			}
+		}
 	}
-	if n < len(message) {
-		log.Printf("Message not complete: %d out of %d bytes written\n", n, len(message))
-		return
+}
+
+func receiveMessages(conn net.Conn, clientMsg chan Message) {
+	defer conn.Close()
+
+	for {
+		buffer := make([]byte, 200)
+		n, err := conn.Read(buffer)
+		if err != nil {
+			conn.Close()
+			return
+		}
+		content := string(buffer[0:n])
+		clientMsg <- Message{conn, content}
 	}
 }
