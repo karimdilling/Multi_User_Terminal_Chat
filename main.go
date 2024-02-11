@@ -14,8 +14,7 @@ func main() {
 	defer listener.Close()
 	log.Printf("Listening to TCP connections on port %v\n", PORT)
 	messages := make(chan Message)
-	conns := []net.Conn{}
-	go sendMessages(messages, &conns)
+	go sendMessages(messages)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -41,32 +40,43 @@ type Message struct {
 	content string
 }
 
-func sendMessages(messages chan Message, conns *[]net.Conn) {
+func sendMessages(messages chan Message) {
+	conns := []net.Conn{}
+
+	sendMessage := func(msg Message, text string) {
+		if msg.msgType == ClientMessage {
+			text = msg.content
+		}
+		for _, conn := range conns {
+			if conn == msg.conn {
+				continue
+			}
+			_, err := conn.Write([]byte(text))
+			if err != nil {
+				log.Printf("Could not send message to %s: %s\n", conn.RemoteAddr(), err)
+			}
+		}
+	}
+
 	for {
 		msg := <-messages
 		switch msg.msgType {
 		case ClientDisconnected:
 			disconnectedAddr := msg.conn.RemoteAddr()
-			for i := 0; i < len(*conns); i++ {
-				if (*conns)[i].RemoteAddr() == disconnectedAddr {
-					*conns = append((*conns)[:i], (*conns)[i+1:]...)
+			for i := 0; i < len(conns); i++ {
+				if (conns)[i].RemoteAddr() == disconnectedAddr {
+					conns = append((conns)[:i], (conns)[i+1:]...)
 					i--
 				}
 			}
+			sendMessage(msg, "------- User disconnected -------\n")
 			log.Printf("Client with address %s disconnected\n", msg.conn.RemoteAddr())
 		case ClientConnected:
-			*conns = append(*conns, msg.conn)
+			conns = append(conns, msg.conn)
+			sendMessage(msg, "------- New user connected -------\n")
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
 		case ClientMessage:
-			for _, conn := range *conns {
-				if conn == msg.conn {
-					continue
-				}
-				_, err := conn.Write([]byte(msg.content))
-				if err != nil {
-					log.Printf("Could not send message to %s: %s\n", conn.RemoteAddr(), err)
-				}
-			}
+			sendMessage(msg, "")
 		}
 	}
 }
