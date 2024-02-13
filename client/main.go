@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
+	"sync"
 )
 
 func main() {
@@ -12,9 +14,26 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not connect to server.")
 	}
-	response, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error when trying to fetch a response.")
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go readMessages(conn)
+	go sendMessage(conn)
+	wg.Wait()
+}
+
+func readMessages(conn net.Conn) {
+	rdbuff := make([]byte, 80)
+	for {
+		n, _ := conn.Read(rdbuff)
+		fmt.Println(string(rdbuff[0:n]))
 	}
-	fmt.Println(response)
+}
+
+func sendMessage(conn net.Conn) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		conn.Write([]byte(input))
+	}
 }
