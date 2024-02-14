@@ -13,6 +13,7 @@ func main() {
 	conn, err := net.Dial("tcp", "localhost:8080")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not connect to server.")
+		return
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
