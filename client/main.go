@@ -17,15 +17,21 @@ func main() {
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go readMessages(conn)
+	go readMessages(conn, &wg)
 	go sendMessage(conn)
 	wg.Wait()
 }
 
-func readMessages(conn net.Conn) {
+func readMessages(conn net.Conn, wg *sync.WaitGroup) {
 	rdbuff := make([]byte, 80)
 	for {
-		n, _ := conn.Read(rdbuff)
+		n, err := conn.Read(rdbuff)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Connection closed by foreign host.")
+			conn.Close()
+			wg.Done()
+			return
+		}
 		fmt.Println(string(rdbuff[0:n]))
 	}
 }
