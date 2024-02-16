@@ -21,7 +21,7 @@ func main() {
 			log.Printf("Could not accept connection: %v\n", err)
 			continue
 		}
-		messages <- Message{conn, ClientConnected, ""}
+		messages <- Message{conn: conn, msgType: ClientConnected}
 		go receiveMessages(conn, messages)
 	}
 }
@@ -69,11 +69,11 @@ func sendMessages(messages chan Message) {
 					i--
 				}
 			}
-			sendMessage(msg, "------- User disconnected -------\n")
+			sendMessage(msg, "\n------- User disconnected -------\n")
 			log.Printf("Client with address %s disconnected\n", msg.conn.RemoteAddr())
 		case ClientConnected:
 			conns = append(conns, msg.conn)
-			sendMessage(msg, "------- New user connected -------\n")
+			sendMessage(msg, "\n------- New user connected -------\n")
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
 		case ClientMessage:
 			sendMessage(msg, "")
@@ -87,10 +87,10 @@ func receiveMessages(conn net.Conn, clientMsg chan Message) {
 		n, err := conn.Read(buffer)
 		if err != nil {
 			conn.Close()
-			clientMsg <- Message{conn, ClientDisconnected, ""}
+			clientMsg <- Message{conn: conn, msgType: ClientDisconnected}
 			return
 		}
 		content := string(buffer[0:n])
-		clientMsg <- Message{conn, ClientMessage, content}
+		clientMsg <- Message{conn: conn, msgType: ClientMessage, content: content}
 	}
 }
