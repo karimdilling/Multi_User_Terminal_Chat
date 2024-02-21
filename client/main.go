@@ -5,6 +5,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -24,27 +26,28 @@ func main() {
 	createChatWindow(app, textview)
 
 	inputField := tview.NewInputField()
-	createInputField(inputField, textview, conn)
+	createInputField(inputField, textview, conn, app)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textview, 0, 9, false).
 		AddItem(inputField, 0, 1, true)
 
-	go readMessages(conn, textview)
+	go readMessages(conn, app, textview)
 
 	if err := app.SetRoot(flex, true).Run(); err != nil {
 		log.Fatalf("Encountered error: %v\n", err)
 	}
+	clearTerminal()
 }
 
-func readMessages(conn net.Conn, textview *tview.TextView) {
+func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView) {
 	rdbuff := make([]byte, 80)
 	for {
 		n, err := conn.Read(rdbuff)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Connection closed by foreign host.")
 			conn.Close()
-			os.Exit(1)
+			fmt.Fprintln(os.Stderr, "Connection closed by foreign host.")
+			app.Stop()
 		}
 		textview.Write(rdbuff[0:n])
 	}
@@ -60,7 +63,7 @@ func createChatWindow(app *tview.Application, textview *tview.TextView) {
 		SetTitle(" Chat ")
 }
 
-func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn) {
+func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application) {
 	inputField.SetBorder(true).
 		SetBackgroundColor(tcell.ColorBlack)
 	inputField.
@@ -75,6 +78,9 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 			case tcell.KeyEnter:
 				input := inputField.GetText()
 				input = strings.TrimSpace(input)
+				if input == ".quit" {
+					app.Stop()
+				}
 				input += "\n"
 				if input != "\n" {
 					textview.Write([]byte("You: " + input))
@@ -83,4 +89,16 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 				inputField.SetText("")
 			}
 		})
+}
+
+func clearTerminal() {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "cls")
+	default:
+		cmd = exec.Command("clear")
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Run()
 }
