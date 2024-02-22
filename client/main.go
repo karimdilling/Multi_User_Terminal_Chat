@@ -36,21 +36,25 @@ func main() {
 		AddItem(textview, 0, 9, false).
 		AddItem(inputField, 0, 1, true)
 
-	go readMessages(conn, app, textview)
+	serverSideDisconnect := false
+	go readMessages(conn, app, textview, &serverSideDisconnect)
 
 	if err := app.SetRoot(flex, true).Run(); err != nil {
 		log.Fatalf("Encountered error: %v\n", err)
 	}
 	clearTerminal()
+	if serverSideDisconnect {
+		fmt.Fprintln(os.Stderr, "Connection closed by foreign host.")
+	}
 }
 
-func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView) {
+func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, serverSideDisconnect *bool) {
 	rdbuff := make([]byte, 80)
 	for {
 		n, err := conn.Read(rdbuff)
 		if err != nil {
 			conn.Close()
-			fmt.Fprintln(os.Stderr, "Connection closed by foreign host.")
+			*serverSideDisconnect = true
 			app.Stop()
 		}
 		textview.Write(rdbuff[0:n])
