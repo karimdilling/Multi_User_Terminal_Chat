@@ -16,7 +16,7 @@ import (
 func main() {
 	fmt.Println("Please enter a username!")
 	username := "User"
-	fmt.Scanln(&username)
+	fmt.Scanf("%s", &username)
 
 	conn, err := net.Dial("tcp", "localhost:8080")
 	if err != nil {
