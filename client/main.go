@@ -14,6 +14,10 @@ import (
 )
 
 func main() {
+	fmt.Println("Please enter a username!")
+	username := "User"
+	fmt.Scanln(&username)
+
 	conn, err := net.Dial("tcp", "localhost:8080")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not connect to server.")
@@ -26,7 +30,7 @@ func main() {
 	createChatWindow(app, textview)
 
 	inputField := tview.NewInputField()
-	createInputField(inputField, textview, conn, app)
+	createInputField(inputField, textview, conn, app, username)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textview, 0, 9, false).
@@ -63,7 +67,7 @@ func createChatWindow(app *tview.Application, textview *tview.TextView) {
 		SetTitle(" Chat ")
 }
 
-func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application) {
+func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, username string) {
 	inputField.SetBorder(true).
 		SetBackgroundColor(tcell.ColorBlack)
 	inputField.
@@ -84,7 +88,7 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 				input += "\n"
 				if input != "\n" {
 					textview.Write([]byte("You: " + input))
-					conn.Write([]byte(input))
+					conn.Write([]byte(username + ": " + input))
 				}
 				inputField.SetText("")
 			}
