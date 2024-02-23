@@ -86,15 +86,17 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 			case tcell.KeyEnter:
 				input := inputField.GetText()
 				input = strings.TrimSpace(input)
-				if input == ".quit" {
+				switch input {
+				case "":
+					break
+				case ".quit":
 					app.Stop()
-				}
-				input += "\n"
-				if input != "\n" {
+				default:
+					input += "\n"
 					textview.Write([]byte("You: " + input))
 					conn.Write([]byte(username + ": " + input))
+					inputField.SetText("")
 				}
-				inputField.SetText("")
 			}
 		})
 }
