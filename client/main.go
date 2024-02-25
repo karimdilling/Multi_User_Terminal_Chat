@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -21,8 +22,16 @@ func main() {
 	conn, err := net.Dial("tcp", "localhost:8080")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not connect to server.")
-		return
+		os.Exit(1)
 	}
+
+	msg := Message{Username: username, MsgType: ClientConnected}
+	msgJSON, err := json.Marshal(&msg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Could not recognize Username. Disconnected from the server.")
+		os.Exit(1)
+	}
+	conn.Write(msgJSON)
 
 	app := tview.NewApplication()
 
@@ -30,7 +39,7 @@ func main() {
 	createChatWindow(app, textview)
 
 	inputField := tview.NewInputField()
-	createInputField(inputField, textview, conn, app, username)
+	createInputField(inputField, textview, conn, app, &msg)
 
 	flex := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(textview, 0, 9, false).
@@ -49,7 +58,7 @@ func main() {
 }
 
 func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, serverSideDisconnect *bool) {
-	rdbuff := make([]byte, 80)
+	rdbuff := make([]byte, 250)
 	for {
 		n, err := conn.Read(rdbuff)
 		if err != nil {
@@ -57,7 +66,17 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 			*serverSideDisconnect = true
 			app.Stop()
 		}
-		textview.Write(rdbuff[0:n])
+		var msg Message
+		err = json.Unmarshal(rdbuff[0:n], &msg)
+		if err != nil {
+			continue
+		}
+		switch msg.MsgType {
+		case ClientMessage:
+			textview.Write([]byte(msg.Username + ": " + msg.Content))
+		case ClientConnected, ClientDisconnected:
+			textview.Write([]byte(msg.Content))
+		}
 	}
 }
 
@@ -71,7 +90,21 @@ func createChatWindow(app *tview.Application, textview *tview.TextView) {
 		SetTitle(" Chat ")
 }
 
-func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, username string) {
+type MessageType int
+
+const (
+	ClientDisconnected MessageType = iota
+	ClientConnected
+	ClientMessage
+)
+
+type Message struct {
+	Username string      `json:"username"`
+	MsgType  MessageType `json:"msg_type"`
+	Content  string      `json:"content"`
+}
+
+func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, msg *Message) {
 	inputField.SetBorder(true).
 		SetBackgroundColor(tcell.ColorBlack)
 	inputField.
@@ -86,15 +119,18 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 			case tcell.KeyEnter:
 				input := inputField.GetText()
 				input = strings.TrimSpace(input)
-				switch input {
+				msg.Content = input
+				msg.MsgType = ClientMessage
+				switch msg.Content {
 				case "":
 					break
 				case ".quit":
 					app.Stop()
 				default:
-					input += "\n"
-					textview.Write([]byte("You: " + input))
-					conn.Write([]byte(username + ": " + input))
+					msg.Content += "\n"
+					textview.Write([]byte(msg.Username + ": " + msg.Content))
+					msgJSON, _ := json.Marshal(msg)
+					conn.Write([]byte(msgJSON))
 					inputField.SetText("")
 				}
 			}

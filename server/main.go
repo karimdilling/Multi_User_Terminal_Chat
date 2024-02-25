@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 )
@@ -14,15 +16,15 @@ func main() {
 	defer listener.Close()
 	log.Printf("Listening to TCP connections on port %v\n", PORT)
 	messages := make(chan Message)
-	go sendMessages(messages)
+	clients := map[string]string{} // maps IP-address:port to username
+	go sendMessages(messages, clients)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("Could not accept connection: %v\n", err)
 			continue
 		}
-		messages <- Message{conn: conn, msgType: ClientConnected}
-		go receiveMessages(conn, messages)
+		go receiveMessages(conn, messages, clients)
 	}
 }
 
@@ -35,23 +37,29 @@ const (
 )
 
 type Message struct {
-	conn    net.Conn
-	msgType MessageType
-	content string
+	conn     net.Conn
+	Username string      `json:"username"`
+	MsgType  MessageType `json:"msg_type"`
+	Content  string      `json:"content"`
 }
 
-func sendMessages(messages chan Message) {
+func sendMessages(messages chan Message, clients map[string]string) {
 	conns := []net.Conn{}
 
-	sendMessage := func(msg Message, text string) {
-		if msg.msgType == ClientMessage {
-			text = msg.content
+	sendMessage := func(msg *Message, text string) {
+		if msg.MsgType == ClientMessage {
+			text = msg.Content
 		}
 		for _, conn := range conns {
 			if conn == msg.conn {
 				continue
 			}
-			_, err := conn.Write([]byte(text))
+			msg.Content = text
+			msgJSON, err := json.Marshal(&msg)
+			if err != nil {
+				log.Printf("Could not parse JSON message: %v\n", err)
+			}
+			_, err = conn.Write([]byte(msgJSON))
 			if err != nil {
 				log.Printf("Could not send message to %s: %s\n", conn.RemoteAddr(), err)
 			}
@@ -60,7 +68,7 @@ func sendMessages(messages chan Message) {
 
 	for {
 		msg := <-messages
-		switch msg.msgType {
+		switch msg.MsgType {
 		case ClientDisconnected:
 			disconnectedAddr := msg.conn.RemoteAddr()
 			for i := 0; i < len(conns); i++ {
@@ -69,28 +77,36 @@ func sendMessages(messages chan Message) {
 					i--
 				}
 			}
-			sendMessage(msg, "\n------- User disconnected -------\n")
+			delete(clients, disconnectedAddr.String())
+			sendMessage(&msg, fmt.Sprintf("\n------- %s disconnected -------\n", msg.Username))
 			log.Printf("Client with address %s disconnected\n", msg.conn.RemoteAddr())
 		case ClientConnected:
 			conns = append(conns, msg.conn)
-			sendMessage(msg, "\n------- New user connected -------\n")
+			clients[msg.conn.RemoteAddr().String()] = msg.Username
+			sendMessage(&msg, fmt.Sprintf("\n------- %s just connected -------\n", msg.Username))
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
 		case ClientMessage:
-			sendMessage(msg, "")
+			sendMessage(&msg, "")
 		}
 	}
 }
 
-func receiveMessages(conn net.Conn, clientMsg chan Message) {
-	buffer := make([]byte, 80)
+func receiveMessages(conn net.Conn, messages chan Message, clients map[string]string) {
+	buffer := make([]byte, 250)
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
 			conn.Close()
-			clientMsg <- Message{conn: conn, msgType: ClientDisconnected}
+			messages <- Message{conn: conn, Username: clients[conn.RemoteAddr().String()], MsgType: ClientDisconnected}
 			return
 		}
-		content := string(buffer[0:n])
-		clientMsg <- Message{conn: conn, msgType: ClientMessage, content: content}
+		var msg Message
+		json.Unmarshal(buffer[0:n], &msg)
+		messages <- Message{
+			conn:     conn,
+			Username: msg.Username,
+			MsgType:  msg.MsgType,
+			Content:  msg.Content,
+		}
 	}
 }
