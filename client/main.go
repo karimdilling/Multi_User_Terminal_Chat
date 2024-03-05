@@ -41,12 +41,21 @@ func main() {
 	inputField := tview.NewInputField()
 	createInputField(inputField, textview, conn, app, &msg)
 
-	flex := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(textview, 0, 9, false).
-		AddItem(inputField, 0, 1, true)
+	textviewClientsOnline := tview.NewTextView().SetChangedFunc(func() {
+		app.Draw()
+	}).
+		ScrollToEnd().
+		SetTextAlign(tview.AlignLeft)
+	textviewClientsOnline.SetBorder(true).SetTitle(" Online ")
+
+	flex := tview.NewFlex().
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(textview, 0, 9, false).
+			AddItem(inputField, 0, 1, true), 0, 3, true).
+		AddItem(textviewClientsOnline, 0, 1, false)
 
 	serverSideDisconnect := false
-	go readMessages(conn, app, textview, &serverSideDisconnect)
+	go readMessages(conn, app, textview, textviewClientsOnline, &serverSideDisconnect)
 
 	if err := app.SetRoot(flex, true).Run(); err != nil {
 		log.Fatalf("Encountered error: %v\n", err)
@@ -57,7 +66,7 @@ func main() {
 	}
 }
 
-func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, serverSideDisconnect *bool) {
+func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, textviewClientsOnline *tview.TextView, serverSideDisconnect *bool) {
 	rdbuff := make([]byte, 250)
 	for {
 		n, err := conn.Read(rdbuff)
@@ -76,6 +85,13 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 			textview.Write([]byte(msg.Username + ": " + msg.Content))
 		case ClientConnected, ClientDisconnected:
 			textview.Write([]byte(msg.Content))
+
+			textviewClientsOnline.Clear()
+			usernameListAsString := ""
+			for _, username := range msg.ClientList {
+				usernameListAsString += username + "\n"
+			}
+			textviewClientsOnline.Write([]byte(usernameListAsString))
 		}
 	}
 }
@@ -99,9 +115,10 @@ const (
 )
 
 type Message struct {
-	Username string      `json:"username"`
-	MsgType  MessageType `json:"msg_type"`
-	Content  string      `json:"content"`
+	Username   string      `json:"username"`
+	MsgType    MessageType `json:"msg_type"`
+	Content    string      `json:"content"`
+	ClientList []string    `json:"client_list"`
 }
 
 func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, msg *Message) {

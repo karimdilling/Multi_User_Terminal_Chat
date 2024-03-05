@@ -37,21 +37,23 @@ const (
 )
 
 type Message struct {
-	conn     net.Conn
-	Username string      `json:"username"`
-	MsgType  MessageType `json:"msg_type"`
-	Content  string      `json:"content"`
+	conn       net.Conn
+	Username   string      `json:"username"`
+	MsgType    MessageType `json:"msg_type"`
+	Content    string      `json:"content"`
+	ClientList []string    `json:"client_list"`
 }
 
 func sendMessages(messages chan Message, clients map[string]string) {
 	conns := []net.Conn{}
+	usernames := []string{}
 
 	sendMessage := func(msg *Message, text string) {
 		if msg.MsgType == ClientMessage {
 			text = msg.Content
 		}
 		for _, conn := range conns {
-			if conn == msg.conn {
+			if conn == msg.conn && msg.MsgType != ClientConnected {
 				continue
 			}
 			msg.Content = text
@@ -74,15 +76,19 @@ func sendMessages(messages chan Message, clients map[string]string) {
 			for i := 0; i < len(conns); i++ {
 				if (conns)[i].RemoteAddr() == disconnectedAddr {
 					conns = append((conns)[:i], (conns)[i+1:]...)
+					usernames = append(usernames[:i], usernames[i+1:]...)
 					i--
 				}
 			}
 			delete(clients, disconnectedAddr.String())
+			msg.ClientList = usernames
 			sendMessage(&msg, fmt.Sprintf("\n------- %s disconnected -------\n", msg.Username))
 			log.Printf("Client with address %s disconnected\n", msg.conn.RemoteAddr())
 		case ClientConnected:
 			conns = append(conns, msg.conn)
 			clients[msg.conn.RemoteAddr().String()] = msg.Username
+			usernames = append(usernames, msg.Username)
+			msg.ClientList = usernames
 			sendMessage(&msg, fmt.Sprintf("\n------- %s just connected -------\n", msg.Username))
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
 		case ClientMessage:
