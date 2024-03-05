@@ -16,7 +16,7 @@ func main() {
 	defer listener.Close()
 	log.Printf("Listening to TCP connections on port %v\n", PORT)
 	messages := make(chan Message)
-	clients := map[string]string{} // maps IP-address:port to username
+	clients := make(map[net.Conn]string)
 	go sendMessages(messages, clients)
 	for {
 		conn, err := listener.Accept()
@@ -44,15 +44,12 @@ type Message struct {
 	ClientList []string    `json:"client_list"`
 }
 
-func sendMessages(messages chan Message, clients map[string]string) {
-	conns := []net.Conn{}
-	usernames := []string{}
-
+func sendMessages(messages chan Message, clients map[net.Conn]string) {
 	sendMessage := func(msg *Message, text string) {
 		if msg.MsgType == ClientMessage {
 			text = msg.Content
 		}
-		for _, conn := range conns {
+		for conn := range clients {
 			if conn == msg.conn && msg.MsgType != ClientConnected {
 				continue
 			}
@@ -72,23 +69,17 @@ func sendMessages(messages chan Message, clients map[string]string) {
 		msg := <-messages
 		switch msg.MsgType {
 		case ClientDisconnected:
-			disconnectedAddr := msg.conn.RemoteAddr()
-			for i := 0; i < len(conns); i++ {
-				if (conns)[i].RemoteAddr() == disconnectedAddr {
-					conns = append((conns)[:i], (conns)[i+1:]...)
-					usernames = append(usernames[:i], usernames[i+1:]...)
-					i--
-				}
+			delete(clients, msg.conn)
+			for _, user := range clients {
+				msg.ClientList = append(msg.ClientList, user)
 			}
-			delete(clients, disconnectedAddr.String())
-			msg.ClientList = usernames
 			sendMessage(&msg, fmt.Sprintf("\n------- %s disconnected -------\n", msg.Username))
 			log.Printf("Client with address %s disconnected\n", msg.conn.RemoteAddr())
 		case ClientConnected:
-			conns = append(conns, msg.conn)
-			clients[msg.conn.RemoteAddr().String()] = msg.Username
-			usernames = append(usernames, msg.Username)
-			msg.ClientList = usernames
+			clients[msg.conn] = msg.Username
+			for _, user := range clients {
+				msg.ClientList = append(msg.ClientList, user)
+			}
 			sendMessage(&msg, fmt.Sprintf("\n------- %s just connected -------\n", msg.Username))
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
 		case ClientMessage:
@@ -97,13 +88,13 @@ func sendMessages(messages chan Message, clients map[string]string) {
 	}
 }
 
-func receiveMessages(conn net.Conn, messages chan Message, clients map[string]string) {
+func receiveMessages(conn net.Conn, messages chan Message, clients map[net.Conn]string) {
 	buffer := make([]byte, 250)
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
 			conn.Close()
-			messages <- Message{conn: conn, Username: clients[conn.RemoteAddr().String()], MsgType: ClientDisconnected}
+			messages <- Message{conn: conn, Username: clients[conn], MsgType: ClientDisconnected}
 			return
 		}
 		var msg Message
