@@ -46,14 +46,17 @@ type Message struct {
 
 func sendMessages(messages chan Message, clients map[net.Conn]string) {
 	sendMessage := func(msg *Message, text string) {
-		if msg.MsgType == ClientMessage {
-			text = msg.Content
-		}
 		for conn := range clients {
 			if conn == msg.conn && msg.MsgType != ClientConnected {
 				continue
 			}
-			msg.Content = text
+
+			if conn == msg.conn && msg.MsgType == ClientConnected {
+				msg.Content = ""
+			} else if msg.MsgType != ClientMessage {
+				msg.Content = text
+			}
+
 			msgJSON, err := json.Marshal(&msg)
 			if err != nil {
 				log.Printf("Could not parse JSON message: %v\n", err)
