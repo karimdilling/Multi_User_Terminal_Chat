@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -88,6 +89,7 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 
 			textviewClientsOnline.Clear()
 			usernameListAsString := ""
+			slices.Sort(msg.ClientList)
 			for _, username := range msg.ClientList {
 				usernameListAsString += username + "\n"
 			}
