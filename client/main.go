@@ -37,7 +37,7 @@ func main() {
 	app := tview.NewApplication()
 
 	textview := tview.NewTextView()
-	createChatWindow(app, textview)
+	createChatWindow(app, textview, &username)
 
 	inputField := tview.NewInputField()
 	createInputField(inputField, textview, conn, app, &msg)
@@ -98,14 +98,14 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 	}
 }
 
-func createChatWindow(app *tview.Application, textview *tview.TextView) {
+func createChatWindow(app *tview.Application, textview *tview.TextView, username *string) {
 	textview.SetChangedFunc(func() {
 		app.Draw()
 	}).
 		ScrollToEnd().
 		SetTextAlign(tview.AlignLeft)
 	textview.SetBorder(true).
-		SetTitle(" Chat ")
+		SetTitle(fmt.Sprintf(" Chat (online as \"%s\") ", *username))
 }
 
 type MessageType int
@@ -147,7 +147,7 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 					app.Stop()
 				default:
 					msg.Content += "\n"
-					textview.Write([]byte(msg.Username + ": " + msg.Content))
+					textview.Write([]byte(msg.Username + " (You): " + msg.Content))
 					msgJSON, _ := json.Marshal(msg)
 					conn.Write([]byte(msgJSON))
 					inputField.SetText("")
