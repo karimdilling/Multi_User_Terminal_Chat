@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -19,6 +20,11 @@ func main() {
 	fmt.Println("Please enter a username!")
 	username := "User"
 	fmt.Scanf("%s", &username)
+
+	user := User{
+		username: username,
+		color:    colors[rand.Intn(len(colors))],
+	}
 
 	conn, err := net.Dial("tcp", "localhost:8080")
 	if err != nil {
@@ -37,16 +43,17 @@ func main() {
 	app := tview.NewApplication()
 
 	textview := tview.NewTextView()
-	createChatWindow(app, textview, &username)
+	createChatWindow(app, textview, &user)
 
 	inputField := tview.NewInputField()
-	createInputField(inputField, textview, conn, app, &msg)
+	createInputField(inputField, textview, conn, app, &msg, &user)
 
 	textviewClientsOnline := tview.NewTextView().SetChangedFunc(func() {
 		app.Draw()
 	}).
 		ScrollToEnd().
-		SetTextAlign(tview.AlignLeft)
+		SetTextAlign(tview.AlignLeft).
+		SetDynamicColors(true)
 	textviewClientsOnline.SetBorder(true).SetTitle(" Online ")
 
 	flex := tview.NewFlex().
@@ -55,8 +62,9 @@ func main() {
 			AddItem(inputField, 0, 1, true), 0, 3, true).
 		AddItem(textviewClientsOnline, 0, 1, false)
 
+	usernameColor := make(map[string]string)
 	serverSideDisconnect := false
-	go readMessages(conn, app, textview, textviewClientsOnline, &serverSideDisconnect)
+	go readMessages(conn, app, textview, textviewClientsOnline, &serverSideDisconnect, usernameColor, &user)
 
 	if err := app.SetRoot(flex, true).Run(); err != nil {
 		log.Fatalf("Encountered error: %v\n", err)
@@ -67,7 +75,7 @@ func main() {
 	}
 }
 
-func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, textviewClientsOnline *tview.TextView, serverSideDisconnect *bool) {
+func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, textviewClientsOnline *tview.TextView, serverSideDisconnect *bool, usernameColor map[string]string, thisClientUser *User) {
 	rdbuff := make([]byte, 250)
 	for {
 		n, err := conn.Read(rdbuff)
@@ -83,7 +91,7 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 		}
 		switch msg.MsgType {
 		case ClientMessage:
-			textview.Write([]byte(msg.Username + ": " + msg.Content))
+			textview.Write([]byte(fmt.Sprintf("[%s]%s[-]: %s", usernameColor[msg.Username], msg.Username, msg.Content)))
 		case ClientConnected, ClientDisconnected:
 			textview.Write([]byte(msg.Content))
 
@@ -91,21 +99,35 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 			usernameListAsString := ""
 			slices.Sort(msg.ClientList)
 			for _, username := range msg.ClientList {
-				usernameListAsString += username + "\n"
+				_, exists := usernameColor[username]
+				if !exists && username != thisClientUser.username {
+					usernameColor[username] = colors[rand.Intn(len(colors))]
+				} else if username == thisClientUser.username {
+					usernameColor[username] = thisClientUser.color
+				}
+				usernameListAsString += fmt.Sprintf("[%s]%s[-]\n", usernameColor[username], username)
 			}
 			textviewClientsOnline.Write([]byte(usernameListAsString))
 		}
 	}
 }
 
-func createChatWindow(app *tview.Application, textview *tview.TextView, username *string) {
+func createChatWindow(app *tview.Application, textview *tview.TextView, thisClientUser *User) {
 	textview.SetChangedFunc(func() {
 		app.Draw()
 	}).
 		ScrollToEnd().
-		SetTextAlign(tview.AlignLeft)
+		SetTextAlign(tview.AlignLeft).
+		SetDynamicColors(true)
 	textview.SetBorder(true).
-		SetTitle(fmt.Sprintf(" Chat (online as \"%s\") ", *username))
+		SetTitle(fmt.Sprintf(" Chat (online as [%s]%s[-]) ", thisClientUser.color, thisClientUser.username))
+}
+
+var colors = [...]string{"green", "blue", "red", "purple", "aqua", "yellow", "pink", "navy"}
+
+type User struct {
+	username string
+	color    string
 }
 
 type MessageType int
@@ -123,7 +145,7 @@ type Message struct {
 	ClientList []string    `json:"client_list"`
 }
 
-func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, msg *Message) {
+func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, msg *Message, thisClientUser *User) {
 	inputField.SetBorder(true).
 		SetBackgroundColor(tcell.ColorBlack)
 	inputField.
@@ -146,8 +168,9 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 				case ".quit":
 					app.Stop()
 				default:
+					msg.Content = tview.Escape(msg.Content)
 					msg.Content += "\n"
-					textview.Write([]byte(msg.Username + " (You): " + msg.Content))
+					textview.Write([]byte(fmt.Sprintf("[%s]%s[-]: %s", thisClientUser.color, msg.Username, msg.Content)))
 					msgJSON, _ := json.Marshal(msg)
 					conn.Write([]byte(msgJSON))
 					inputField.SetText("")
