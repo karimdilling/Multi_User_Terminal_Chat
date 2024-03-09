@@ -118,7 +118,8 @@ func createChatWindow(app *tview.Application, textview *tview.TextView, thisClie
 	}).
 		ScrollToEnd().
 		SetTextAlign(tview.AlignLeft).
-		SetDynamicColors(true)
+		SetDynamicColors(true).
+		SetMaxLines(10000)
 	textview.SetBorder(true).
 		SetTitle(fmt.Sprintf(" Chat (online as [%s]%s[-]) ", thisClientUser.color, thisClientUser.username))
 }
