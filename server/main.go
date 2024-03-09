@@ -76,14 +76,14 @@ func sendMessages(messages chan Message, clients map[net.Conn]string) {
 			for _, user := range clients {
 				msg.ClientList = append(msg.ClientList, user)
 			}
-			sendMessage(&msg, fmt.Sprintf("------- %s disconnected -------\n", msg.Username))
+			sendMessage(&msg, fmt.Sprintf("####### %s disconnected #######\n", msg.Username))
 			log.Printf("Client with address %s disconnected\n", msg.conn.RemoteAddr())
 		case ClientConnected:
 			clients[msg.conn] = msg.Username
 			for _, user := range clients {
 				msg.ClientList = append(msg.ClientList, user)
 			}
-			sendMessage(&msg, fmt.Sprintf("------- %s just connected -------\n", msg.Username))
+			sendMessage(&msg, fmt.Sprintf("####### %s just connected #######\n", msg.Username))
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
 		case ClientMessage:
 			sendMessage(&msg, "")

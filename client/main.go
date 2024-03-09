@@ -93,7 +93,7 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 		case ClientMessage:
 			textview.Write([]byte(fmt.Sprintf("[%s]%s[-]: %s", usernameColor[msg.Username], msg.Username, msg.Content)))
 		case ClientConnected, ClientDisconnected:
-			textview.Write([]byte(msg.Content))
+			textview.Write([]byte("[::r]" + msg.Content + "[-:-:-:-]")) // [::r] inverts colors and [-:-:-:-] resets formatting
 
 			textviewClientsOnline.Clear()
 			usernameListAsString := ""
