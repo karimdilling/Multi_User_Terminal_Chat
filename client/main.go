@@ -17,22 +17,44 @@ import (
 )
 
 func main() {
+	user := getUsername()
+
+	conn := connectToServer(&user.username)
+
+	app := tview.NewApplication()
+	layout, chat, clientsOnline := setupUI(app, conn, &user)
+
+	serverSideDisconnect := false
+	go readMessages(conn, app, chat, clientsOnline, &serverSideDisconnect, &user)
+
+	if err := app.SetRoot(layout, true).Run(); err != nil {
+		log.Fatalf("Encountered error: %v\n", err)
+	}
+	clearTerminal()
+	if serverSideDisconnect {
+		fmt.Fprintln(os.Stderr, "Connection closed by foreign host.")
+	}
+}
+
+func getUsername() User {
 	fmt.Println("Please enter a username!")
 	username := "User"
 	fmt.Scanf("%s", &username)
 
-	user := User{
+	return User{
 		username: username,
 		color:    colors[rand.Intn(len(colors))],
 	}
+}
 
+func connectToServer(username *string) net.Conn {
 	conn, err := net.Dial("tcp", "localhost:8080")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not connect to server.")
 		os.Exit(1)
 	}
 
-	msg := Message{Username: username, MsgType: ClientConnected}
+	msg := Message{Username: *username, MsgType: ClientConnected}
 	msgJSON, err := json.Marshal(&msg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not recognize Username. Disconnected from the server.")
@@ -40,13 +62,15 @@ func main() {
 	}
 	conn.Write(msgJSON)
 
-	app := tview.NewApplication()
+	return conn
+}
 
+func setupUI(app *tview.Application, conn net.Conn, user *User) (*tview.Flex, *tview.TextView, *tview.TextView) {
 	textview := tview.NewTextView()
-	createChatWindow(app, textview, &user)
+	createChatWindow(app, textview, user)
 
 	inputField := tview.NewInputField()
-	createInputField(inputField, textview, conn, app, &msg, &user)
+	createInputField(inputField, textview, conn, app, user)
 
 	textviewClientsOnline := tview.NewTextView().SetChangedFunc(func() {
 		app.Draw()
@@ -62,20 +86,11 @@ func main() {
 			AddItem(inputField, 0, 1, true), 0, 3, true).
 		AddItem(textviewClientsOnline, 0, 1, false)
 
-	usernameColor := make(map[string]string)
-	serverSideDisconnect := false
-	go readMessages(conn, app, textview, textviewClientsOnline, &serverSideDisconnect, usernameColor, &user)
-
-	if err := app.SetRoot(flex, true).Run(); err != nil {
-		log.Fatalf("Encountered error: %v\n", err)
-	}
-	clearTerminal()
-	if serverSideDisconnect {
-		fmt.Fprintln(os.Stderr, "Connection closed by foreign host.")
-	}
+	return flex, textview, textviewClientsOnline
 }
 
-func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, textviewClientsOnline *tview.TextView, serverSideDisconnect *bool, usernameColor map[string]string, thisClientUser *User) {
+func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextView, textviewClientsOnline *tview.TextView, serverSideDisconnect *bool, thisClientUser *User) {
+	usernameColor := make(map[string]string)
 	rdbuff := make([]byte, 250)
 	for {
 		n, err := conn.Read(rdbuff)
@@ -146,7 +161,7 @@ type Message struct {
 	ClientList []string    `json:"client_list"`
 }
 
-func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, msg *Message, thisClientUser *User) {
+func createInputField(inputField *tview.InputField, textview *tview.TextView, conn net.Conn, app *tview.Application, thisClientUser *User) {
 	inputField.SetBorder(true).
 		SetBackgroundColor(tcell.ColorBlack)
 	inputField.
@@ -161,6 +176,8 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 			case tcell.KeyEnter:
 				input := inputField.GetText()
 				input = strings.TrimSpace(input)
+				var msg Message
+				msg.Username = thisClientUser.username
 				msg.Content = input
 				msg.MsgType = ClientMessage
 				switch msg.Content {
@@ -171,7 +188,7 @@ func createInputField(inputField *tview.InputField, textview *tview.TextView, co
 				default:
 					msg.Content = tview.Escape(msg.Content)
 					msg.Content += "\n"
-					textview.Write([]byte(fmt.Sprintf("[%s]%s[-]: %s", thisClientUser.color, msg.Username, msg.Content)))
+					textview.Write([]byte(fmt.Sprintf("[%s]%s[-]: %s", thisClientUser.color, thisClientUser.username, msg.Content)))
 					msgJSON, _ := json.Marshal(msg)
 					conn.Write([]byte(msgJSON))
 					inputField.SetText("")
