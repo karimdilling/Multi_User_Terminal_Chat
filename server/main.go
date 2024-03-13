@@ -34,6 +34,7 @@ const (
 	ClientDisconnected MessageType = iota
 	ClientConnected
 	ClientMessage
+	InvalidUsername
 )
 
 type Message struct {
@@ -46,6 +47,17 @@ type Message struct {
 
 func sendMessages(messages chan Message, clients map[net.Conn]string) {
 	sendMessage := func(msg *Message, text string) {
+		if msg.MsgType == InvalidUsername {
+			msgJSON, err := json.Marshal(&msg)
+			if err != nil {
+				log.Printf("Could not parse JSON message: %v\n", err)
+			}
+			_, err = msg.conn.Write([]byte(msgJSON))
+			if err != nil {
+				log.Printf("Could not send message to %s: %s\n", msg.conn.RemoteAddr(), err)
+			}
+			return
+		}
 		for conn := range clients {
 			if conn == msg.conn && msg.MsgType != ClientConnected {
 				continue
@@ -85,7 +97,7 @@ func sendMessages(messages chan Message, clients map[net.Conn]string) {
 			}
 			sendMessage(&msg, fmt.Sprintf("####### %s just connected #######\n", msg.Username))
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
-		case ClientMessage:
+		case ClientMessage, InvalidUsername:
 			sendMessage(&msg, "")
 		}
 	}
@@ -102,6 +114,14 @@ func receiveMessages(conn net.Conn, messages chan Message, clients map[net.Conn]
 		}
 		var msg Message
 		json.Unmarshal(buffer[0:n], &msg)
+		if msg.MsgType == ClientConnected && !isValidUsername(msg.Username, clients) {
+			messages <- Message{
+				conn:     conn,
+				Username: msg.Username,
+				MsgType:  InvalidUsername,
+			}
+			return
+		}
 		messages <- Message{
 			conn:     conn,
 			Username: msg.Username,
@@ -109,4 +129,13 @@ func receiveMessages(conn net.Conn, messages chan Message, clients map[net.Conn]
 			Content:  msg.Content,
 		}
 	}
+}
+
+func isValidUsername(username string, clients map[net.Conn]string) bool {
+	for _, user := range clients {
+		if user == username {
+			return false
+		}
+	}
+	return true
 }

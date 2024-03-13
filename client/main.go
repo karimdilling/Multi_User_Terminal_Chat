@@ -123,6 +123,10 @@ func readMessages(conn net.Conn, app *tview.Application, textview *tview.TextVie
 				usernameListAsString += fmt.Sprintf("[%s]%s[-]\n", usernameColor[username], username)
 			}
 			textviewClientsOnline.Write([]byte(usernameListAsString))
+		case InvalidUsername:
+			conn.Close()
+			fmt.Fprintln(os.Stderr, "Username already in use, please choose another one.")
+			os.Exit(1)
 		}
 	}
 }
@@ -152,6 +156,7 @@ const (
 	ClientDisconnected MessageType = iota
 	ClientConnected
 	ClientMessage
+	InvalidUsername
 )
 
 type Message struct {
