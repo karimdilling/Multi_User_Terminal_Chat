@@ -46,18 +46,23 @@ type Message struct {
 }
 
 func sendMessages(messages chan Message, clients map[net.Conn]string) {
-	sendMessage := func(msg *Message, text string) {
+	sendMessage := func(msg *Message, conn net.Conn) {
+		msgJSON, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("Could not parse JSON message: %v\n", err)
+		}
+		_, err = conn.Write([]byte(msgJSON))
+		if err != nil {
+			log.Printf("Could not send message to %s: %s\n", conn.RemoteAddr(), err)
+		}
+	}
+
+	distributeMessageToClients := func(msg *Message, text string) {
 		if msg.MsgType == InvalidUsername {
-			msgJSON, err := json.Marshal(&msg)
-			if err != nil {
-				log.Printf("Could not parse JSON message: %v\n", err)
-			}
-			_, err = msg.conn.Write([]byte(msgJSON))
-			if err != nil {
-				log.Printf("Could not send message to %s: %s\n", msg.conn.RemoteAddr(), err)
-			}
+			sendMessage(msg, msg.conn)
 			return
 		}
+
 		for conn := range clients {
 			if conn == msg.conn && msg.MsgType != ClientConnected {
 				continue
@@ -69,14 +74,7 @@ func sendMessages(messages chan Message, clients map[net.Conn]string) {
 				msg.Content = text
 			}
 
-			msgJSON, err := json.Marshal(&msg)
-			if err != nil {
-				log.Printf("Could not parse JSON message: %v\n", err)
-			}
-			_, err = conn.Write([]byte(msgJSON))
-			if err != nil {
-				log.Printf("Could not send message to %s: %s\n", conn.RemoteAddr(), err)
-			}
+			sendMessage(msg, conn)
 		}
 	}
 
@@ -88,17 +86,17 @@ func sendMessages(messages chan Message, clients map[net.Conn]string) {
 			for _, user := range clients {
 				msg.ClientList = append(msg.ClientList, user)
 			}
-			sendMessage(&msg, fmt.Sprintf("####### %s disconnected #######\n", msg.Username))
+			distributeMessageToClients(&msg, fmt.Sprintf("####### %s disconnected #######\n", msg.Username))
 			log.Printf("Client with address %s disconnected\n", msg.conn.RemoteAddr())
 		case ClientConnected:
 			clients[msg.conn] = msg.Username
 			for _, user := range clients {
 				msg.ClientList = append(msg.ClientList, user)
 			}
-			sendMessage(&msg, fmt.Sprintf("####### %s just connected #######\n", msg.Username))
+			distributeMessageToClients(&msg, fmt.Sprintf("####### %s just connected #######\n", msg.Username))
 			log.Printf("Accepted connection from %v\n", msg.conn.RemoteAddr())
 		case ClientMessage, InvalidUsername:
-			sendMessage(&msg, "")
+			distributeMessageToClients(&msg, "")
 		}
 	}
 }
