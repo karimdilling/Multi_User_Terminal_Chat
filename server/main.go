@@ -8,13 +8,15 @@ import (
 )
 
 func main() {
-	const PORT = "8080"
-	listener, err := net.Listen("tcp", ":"+PORT)
+	fmt.Println("Which port should the server listen on? Default is port 8080.")
+	port := "8080"
+	fmt.Scanf("%s\n", &port)
+	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {
-		log.Fatalf("Could not listen on port %v: %v\n", PORT, err)
+		log.Fatalf("Could not listen on port %v: %v\n", port, err)
 	}
 	defer listener.Close()
-	log.Printf("Listening to TCP connections on port %v\n", PORT)
+	log.Printf("Listening to TCP connections on port %v\n", port)
 	messages := make(chan Message)
 	clients := make(map[net.Conn]string)
 	go sendMessages(messages, clients)

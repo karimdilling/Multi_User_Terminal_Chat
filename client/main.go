@@ -39,7 +39,7 @@ func main() {
 func getUsername() User {
 	fmt.Println("Please enter a username!")
 	username := "User"
-	fmt.Scanf("%s", &username)
+	fmt.Scanf("%s\n", &username)
 
 	return User{
 		username: username,
@@ -48,7 +48,12 @@ func getUsername() User {
 }
 
 func connectToServer(username *string) net.Conn {
-	conn, err := net.Dial("tcp", "localhost:8080")
+	fmt.Println("Please enter an IP address and a port to connect to: <IP-address:port>")
+	fmt.Println("Not entering anything defaults to <localhost:8080>.")
+	ipAndPort := "localhost:8080"
+	fmt.Scanf("%s\n", &ipAndPort)
+
+	conn, err := net.Dial("tcp", ipAndPort)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not connect to server.")
 		os.Exit(1)
