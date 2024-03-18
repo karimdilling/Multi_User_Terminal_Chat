@@ -17,9 +17,7 @@ import (
 )
 
 func main() {
-	user := getUsername()
-
-	conn := connectToServer(&user.username)
+	conn, user := connectToServer()
 
 	app := tview.NewApplication()
 	layout, chat, clientsOnline := setupUI(app, conn, &user)
@@ -47,7 +45,7 @@ func getUsername() User {
 	}
 }
 
-func connectToServer(username *string) net.Conn {
+func connectToServer() (net.Conn, User) {
 	fmt.Println("Please enter an IP address and a port to connect to: <IP-address:port>")
 	fmt.Println("Not entering anything defaults to <localhost:8080>.")
 	ipAndPort := "localhost:8080"
@@ -59,7 +57,8 @@ func connectToServer(username *string) net.Conn {
 		os.Exit(1)
 	}
 
-	msg := Message{Username: *username, MsgType: ClientConnected}
+	user := getUsername()
+	msg := Message{Username: user.username, MsgType: ClientConnected}
 	msgJSON, err := json.Marshal(&msg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not recognize Username. Disconnected from the server.")
@@ -67,7 +66,7 @@ func connectToServer(username *string) net.Conn {
 	}
 	conn.Write(msgJSON)
 
-	return conn
+	return conn, user
 }
 
 func setupUI(app *tview.Application, conn net.Conn, user *User) (*tview.Flex, *tview.TextView, *tview.TextView) {
