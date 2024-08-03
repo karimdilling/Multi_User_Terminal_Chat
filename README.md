@@ -16,3 +16,6 @@ Build client:
 # Further Instructions
 After building the executables run the server from the root directory with `./bin/chat_server`. It will prompt you to enter a port you want to start the server on (and provides a default port).
 Then run the client executable directly in the terminal (after building available as `./bin/chat_client`) on any computer you want to connect to the server with.
+
+# Disclaimer
+The messages that you send between the client and the server are not encrypted. So be aware of this and use at your own risk.
